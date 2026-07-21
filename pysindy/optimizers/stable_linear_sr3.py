@@ -78,6 +78,12 @@ class StableLinearSR3(ConstrainedSR3):
         output should be verbose or not. Only relevant for optimizers that
         use the CVXPY package in some capabity.
 
+    solver : str, optional (default ``"OSQP"``)
+        CVXPY solver to use (e.g. ``"OSQP"``, ``"SCS"``, ``"CLARABEL"``,
+        ``"GUROBI"``). The ``max_iter``, ``eps_abs``, and ``eps_rel``
+        settings are only passed when the solver accepts them (OSQP or SCS);
+        other solvers use their own defaults.
+
     See base class for additional arguments
 
     Attributes
@@ -111,6 +117,7 @@ class StableLinearSR3(ConstrainedSR3):
         constraint_separation_index=0,
         verbose=False,
         verbose_cvxpy=False,
+        solver="OSQP",
         gamma=-1e-8,
         unbias=False,
     ):
@@ -127,6 +134,7 @@ class StableLinearSR3(ConstrainedSR3):
             normalize_columns=normalize_columns,
             verbose=verbose,
             verbose_cvxpy=verbose_cvxpy,
+            solver=solver,
             constraint_lhs=constraint_lhs,
             constraint_rhs=constraint_rhs,
             constraint_order=constraint_order,
@@ -200,12 +208,16 @@ class StableLinearSR3(ConstrainedSR3):
             prob = cp.Problem(cp.Minimize(cost))
 
         try:
-            prob.solve(
-                max_iter=self.max_iter**2,
-                eps_abs=self.tol,
-                eps_rel=self.tol,
-                verbose=self.verbose_cvxpy,
-            )
+            solver_kwargs = {"verbose": self.verbose_cvxpy}
+            if self.solver is not None:
+                solver_kwargs["solver"] = self.solver
+            if self.solver is not None and self.solver.upper() in ("OSQP", "SCS"):
+                solver_kwargs.update(
+                    max_iter=self.max_iter**2,
+                    eps_abs=self.tol,
+                    eps_rel=self.tol,
+                )
+            prob.solve(**solver_kwargs)
         except cp.error.SolverError:
             print("Solver failed, setting coefs to zeros")
             xi.value = np.zeros(coef_sparse.shape[0] * coef_sparse.shape[1])

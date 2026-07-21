@@ -75,6 +75,12 @@ class ConstrainedSR3(SR3):
         output should be verbose or not. Only relevant for optimizers that
         use the CVXPY package in some capabity.
 
+    solver : str, optional (default ``"OSQP"``)
+        CVXPY solver to use (e.g. ``"OSQP"``, ``"SCS"``, ``"CLARABEL"``,
+        ``"GUROBI"``). The ``max_iter``, ``eps_abs``, and ``eps_rel``
+        settings are only passed when the solver accepts them (OSQP or SCS);
+        other solvers use their own defaults.
+
     See base class for additional arguments
 
     Attributes
@@ -118,6 +124,7 @@ class ConstrainedSR3(SR3):
         constraint_separation_index: Optional[bool] = None,
         verbose=False,
         verbose_cvxpy=False,
+        solver="OSQP",
         unbias=False,
     ):
         super().__init__(
@@ -136,6 +143,7 @@ class ConstrainedSR3(SR3):
         )
 
         self.verbose_cvxpy = verbose_cvxpy
+        self.solver = solver
         self.constraint_lhs = constraint_lhs
         self.constraint_rhs = constraint_rhs
         self.constraint_order = constraint_order
@@ -269,17 +277,24 @@ class ConstrainedSR3(SR3):
             prob = cp.Problem(cp.Minimize(cost))
 
         prob_clone = deepcopy(prob)
-        try:
-            prob.solve(
-                max_iter=self.max_iter,
-                eps_abs=tol,
-                eps_rel=tol,
-                verbose=self.verbose_cvxpy,
+        solver_kwargs = {"verbose": self.verbose_cvxpy}
+        if self.solver is not None:
+            solver_kwargs["solver"] = self.solver
+        if self.solver is not None and self.solver.upper() in ("OSQP", "SCS"):
+            solver_kwargs.update(
+                max_iter=self.max_iter, eps_abs=tol, eps_rel=tol
             )
+        try:
+            prob.solve(**solver_kwargs)
         except cp.error.SolverError:
             try:
                 prob = prob_clone
-                prob.solve(max_iter=self.max_iter, verbose=self.verbose_cvxpy)
+                retry_kwargs = {"verbose": self.verbose_cvxpy}
+                if self.solver is not None:
+                    retry_kwargs["solver"] = self.solver
+                if self.solver is not None and self.solver.upper() in ("OSQP", "SCS"):
+                    retry_kwargs["max_iter"] = self.max_iter
+                prob.solve(**retry_kwargs)
                 xi = prob.variables()[0]
             except cp.error.SolverError:
                 warnings.warn("Solver failed, setting coefs to zeros")

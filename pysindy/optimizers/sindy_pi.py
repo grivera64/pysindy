@@ -43,6 +43,12 @@ class SINDyPI(SR3):
         output should be verbose or not. Only relevant for optimizers that
         use the CVXPY package in some capabity.
 
+    solver : str, optional (default ``"OSQP"``)
+        CVXPY solver to use (e.g. ``"OSQP"``, ``"SCS"``, ``"CLARABEL"``,
+        ``"GUROBI"``). The ``max_iter``, ``eps_abs``, and ``eps_rel``
+        settings are only passed when the solver accepts them (OSQP or SCS);
+        other solvers use their own defaults.
+
     Attributes
     ----------
     coef_ : array, shape (n_features,) or (n_targets, n_features)
@@ -63,6 +69,7 @@ class SINDyPI(SR3):
         model_subset=None,
         normalize_columns=False,
         verbose_cvxpy=False,
+        solver="OSQP",
         unbias=False,
     ):
         super().__init__(
@@ -84,6 +91,7 @@ class SINDyPI(SR3):
         if self.unbias:
             raise ValueError("SINDyPI is incompatible with an unbiasing step")
         self.verbose_cvxpy = verbose_cvxpy
+        self.solver = solver
         warnings.warn(
             "SINDyPI (optimizer) is deprecated and will be removed in a future version."
             " Use ParallelImplicitSINDy instead.",
@@ -147,12 +155,16 @@ class SINDyPI(SR3):
                 [xi[i] == 0.0],
             )
             try:
-                prob.solve(
-                    max_iter=self.max_iter,
-                    eps_abs=self.tol,
-                    eps_rel=self.tol,
-                    verbose=self.verbose_cvxpy,
-                )
+                solver_kwargs = {"verbose": self.verbose_cvxpy}
+                if self.solver is not None:
+                    solver_kwargs["solver"] = self.solver
+                if self.solver is not None and self.solver.upper() in ("OSQP", "SCS"):
+                    solver_kwargs.update(
+                        max_iter=self.max_iter,
+                        eps_abs=self.tol,
+                        eps_rel=self.tol,
+                    )
+                prob.solve(**solver_kwargs)
                 if xi.value is None:
                     warnings.warn(
                         "Infeasible solve on iteration "
