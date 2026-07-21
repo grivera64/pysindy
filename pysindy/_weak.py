@@ -609,54 +609,6 @@ class WeakSINDy(SINDy):
         self._fit_shape()
         return self
 
-    def simulate(
-        self,
-        x0,
-        t,
-        u=None,
-        integrator="solve_ivp",
-        interpolator=None,
-        integrator_kws={"method": "LSODA", "rtol": 1e-12, "atol": 1e-12},
-        interpolator_kws={},
-    ):
-        """Simulate the fitted ODE forward in time from an initial condition.
-
-        Only implemented for ODEs (not PDEs).
-
-        Parameters
-        ----------
-        x0 : array-like, shape (n_input_features,)
-            Initial state.
-        t : array-like, shape (n_samples,)
-            Time points at which to return the solution.
-        u : callable or array-like, optional
-            Control input.  See :meth:`SINDy.simulate` for details.
-        integrator : str, optional (default ``'solve_ivp'``)
-            ODE integrator to use.  See :meth:`SINDy.simulate` for options.
-        interpolator : callable, optional
-            Interpolator for control input.  See :meth:`SINDy.simulate`.
-        integrator_kws : dict, optional
-            Keyword arguments forwarded to the integrator.
-        interpolator_kws : dict, optional
-            Keyword arguments forwarded to the interpolator.
-
-        Returns
-        -------
-        x : np.ndarray, shape (n_samples, n_input_features)
-            Simulated trajectory.
-
-        Raises
-        ------
-        TypeError
-            If the model was trained on PDE data (``grid_ndim_ > 1``), since
-            simulation requires a pure ODE system.
-        """
-        if self.grid_ndim_ > 1:
-            raise TypeError("Model trained as PDE, but can only simulate ODEs")
-        return super().simulate(
-            x0, t, u, integrator, interpolator, integrator_kws, interpolator_kws
-        )
-
     def get_feature_names(self) -> list[str]:
         """
         Get a list of names of features used by SINDy model.

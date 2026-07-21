@@ -627,8 +627,15 @@ class SINDy(_BaseSINDy):
 
         Parameters
         ----------
-        x0: numpy array, size [n_features]
-            Initial condition from which to simulate.
+        x0: numpy array, size [n_features] or [*spatial, n_features]
+            Initial condition from which to simulate. For ODEs, ``x0`` is a
+            1-D array of length ``n_features``. For PDEs, ``x0`` may carry
+            leading spatial axes (e.g. shape ``(n_x, n_features)`` or
+            ``(n_x, n_y, n_features)``); the integrator then advances the
+            full spatial field forward in time. PDE simulation requires a
+            per-step integrator such as :class:`pysindy.integrator.RK4Integrator`
+            (pass ``integrator="rk4"``), since the default
+            ``solve_ivp``/``odeint`` adapters only accept 1-D states.
 
         t: numpy array of size [n_samples]
             Array of time points at which to simulate.
@@ -679,40 +686,36 @@ class SINDy(_BaseSINDy):
                     "Control variables u were ignored because control "
                     "variables were not used when the model was fit"
                 )
-
-            def rhs(t, x):
-                return self.predict(x[np.newaxis, :])[0]
-
-        else:
-            if not callable(u):
-                if interpolator is None:
-                    u_fun = interp1d(
-                        t, u, axis=0, kind="cubic", fill_value="extrapolate"
-                    )
-                else:
-                    u_fun = interpolator(t, u, **interpolator_kws)
-
-                t = t[:-1]
-                warnings.warn(
-                    "Last time point dropped in simulation because "
-                    "interpolation of control input was used. To avoid "
-                    "this, pass in a callable for u."
+            u_fun = None
+        elif not callable(u):
+            if interpolator is None:
+                u_fun = interp1d(
+                    t, u, axis=0, kind="cubic", fill_value="extrapolate"
                 )
             else:
-                u_fun = u
+                u_fun = interpolator(t, u, **interpolator_kws)
+            t = t[:-1]
+            warnings.warn(
+                "Last time point dropped in simulation because "
+                "interpolation of control input was used. To avoid "
+                "this, pass in a callable for u."
+            )
+        else:
+            u_fun = u
 
-            if u_fun(t[0]).ndim == 1:
+        def rhs(t, x):
+            # Insert a singleton sample axis before the coord axis so that
+            # ``predict`` accepts both ODE (n_features,) and PDE
+            # (*spatial, n_features) states.
+            start_shape = np.asarray(x).shape
+            x_batched = np.reshape(x, start_shape[:-1] + (1,) + start_shape[-1:])
+            if u_fun is None:
+                return self.predict(x_batched)[0]
+            u_eval = u_fun(t)
+            if u_eval.ndim == 1:
+                u_eval = u_eval.reshape(1, -1)
+            return self.predict(x_batched, u_eval)[0]
 
-                def rhs(t, x):
-                    return self.predict(x[np.newaxis, :], u_fun(t).reshape(1, -1))[0]
-
-            else:
-
-                def rhs(t, x):
-                    return self.predict(x[np.newaxis, :], u_fun(t))[0]
-
-        # Resolve the integrator from a name or class, then delegate.
-        # Each integrator class applies its own default kwargs internally.
         integrator_cls = get_integrator(integrator)
         result = integrator_cls().solve_ivp(rhs, t, x0, **integrator_kws)
         return result.x
