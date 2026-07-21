@@ -9,8 +9,6 @@ from typing import Sequence
 from typing import Union
 
 import numpy as np
-from scipy.integrate import odeint
-from scipy.integrate import solve_ivp
 from scipy.interpolate import interp1d
 from sklearn.base import BaseEstimator
 from sklearn.metrics import r2_score
@@ -22,6 +20,7 @@ from .differentiation import BaseDifferentiation
 from .differentiation import FiniteDifference
 from .feature_library import PolynomialLibrary
 from .feature_library.base import BaseFeatureLibrary
+from .integrator import get_integrator
 
 try:  # Waiting on PEP 690 to lazy import CVXPY
     from .optimizers import SINDyPI
@@ -620,7 +619,7 @@ class SINDy(_BaseSINDy):
         u=None,
         integrator="solve_ivp",
         interpolator=None,
-        integrator_kws={"method": "LSODA", "rtol": 1e-12, "atol": 1e-12},
+        integrator_kws={},
         interpolator_kws={},
     ):
         """
@@ -643,17 +642,18 @@ class SINDy(_BaseSINDy):
             of control inputs at each time step. In this case, the array is fit
             with the interpolator specified by ``interpolator``.
 
-        integrator: string, optional (default ``solve_ivp``)
-            Function to use to integrate the system.
-            Default is ``scipy.integrate.solve_ivp``. The only options
-            currently supported are solve_ivp and odeint.
+        integrator: string or BaseIntegrator subclass, optional (default ``solve_ivp``)
+            Integrator to use to integrate the system. May be a registered
+            name (``"solve_ivp"`` or ``"odeint"``) or a subclass of
+            :class:`pysindy.integrator.BaseIntegrator`.
 
         interpolator: callable, optional (default ``interp1d``)
             Function used to interpolate control inputs if ``u`` is an array.
             Default is ``scipy.interpolate.interp1d``.
 
-        integrator_kws: dict, optional (default {})
-            Optional keyword arguments to pass to the integrator
+        integrator_kws: dict, optional (default None)
+            Optional keyword arguments to pass to the integrator. If None,
+            the integrator class's ``_default_kwargs`` are used.
 
         interpolator_kws: dict, optional (default {})
             Optional keyword arguments to pass to the control input interpolator
@@ -711,16 +711,11 @@ class SINDy(_BaseSINDy):
                 def rhs(t, x):
                     return self.predict(x[np.newaxis, :], u_fun(t))[0]
 
-        # Need to hard-code below, because odeint and solve_ivp
-        # have different syntax and integration options.
-        if integrator == "solve_ivp":
-            return ((solve_ivp(rhs, (t[0], t[-1]), x0, t_eval=t, **integrator_kws)).y).T
-        elif integrator == "odeint":
-            if integrator_kws.get("method") == "LSODA":
-                integrator_kws = {}
-            return odeint(rhs, x0, t, tfirst=True, **integrator_kws)
-        else:
-            raise ValueError("Integrator not supported, exiting")
+        # Resolve the integrator from a name or class, then delegate.
+        # Each integrator class applies its own default kwargs internally.
+        integrator_cls = get_integrator(integrator)
+        result = integrator_cls().solve_ivp(rhs, t, x0, **integrator_kws)
+        return result.x
 
     @property
     def complexity(self):
