@@ -708,16 +708,29 @@ class SINDy(_BaseSINDy):
             # ``predict`` accepts both ODE (n_features,) and PDE
             # (*spatial, n_features) states.
             start_shape = np.asarray(x).shape
+            sample_axis = len(start_shape) - 1
             x_batched = np.reshape(x, start_shape[:-1] + (1,) + start_shape[-1:])
             if u_fun is None:
-                return self.predict(x_batched)[0]
-            u_eval = u_fun(t)
-            if u_eval.ndim == 1:
-                u_eval = u_eval.reshape(1, -1)
-            return self.predict(x_batched, u_eval)[0]
+                pred = self.predict(x_batched)
+            else:
+                u_eval = u_fun(t)
+                if u_eval.ndim == 1:
+                    u_eval = u_eval.reshape(1, -1)
+                pred = self.predict(x_batched, u_eval)
+            # ``predict`` returns an array with the singleton sample axis
+            # still in place.  Squeeze that axis to recover the shape of x.
+            return np.squeeze(pred, axis=sample_axis)
 
         integrator_cls = get_integrator(integrator)
         result = integrator_cls().solve_ivp(rhs, t, x0, **integrator_kws)
+        if not result.success:
+            warnings.warn(
+                f"Integration failed: {result.message}", RuntimeWarning
+            )
+        # If x0 has spatial dims, move the spatial dims to the front
+        x0_arr = np.asarray(x0)
+        if x0_arr.ndim > 1:
+            return np.moveaxis(result.x, 0, -2)
         return result.x
 
     @property

@@ -33,25 +33,44 @@ class ScipyIntegrator(BaseIntegrator):
                 "apply_constraints is not supported for ScipyIntegrator. "
                 "Use a per-step integrator (e.g. RK4) instead."
             )
-        if x0.ndim != 1:
-            raise ValueError(
-                "ScipyIntegrator requires a 1-D initial condition x0, "
-                f"got shape {x0.shape}. For PDEs with spatial structure, "
-                "use RK4Integrator instead."
-            )
         t = np.asarray(t, dtype=float)
         kwargs = {**self._default_kwargs, **kwargs}
-        sol = _scipy_solve_ivp(
-            rhs,
-            (t[0], t[-1]),
-            x0,
-            t_eval=t,
-            **kwargs,
-        )
+
+        # scipy.solve_ivp requires a 1-D state.  For PDE-shaped x0
+        # (e.g. ``(n_x, n_y, n_features)``) we flatten before integration
+        # and restore the shape inside a wrapper so the rhs still
+        # receives the original spatial structure.
+        original_shape = np.asarray(x0).shape
+        if x0.ndim != 1:
+            x0_flat = np.ravel(x0)
+
+            def rhs_flat(t, x_flat):
+                x = np.reshape(x_flat, original_shape)
+                return np.ravel(rhs(t, x))
+
+            sol = _scipy_solve_ivp(
+                rhs_flat,
+                (t[0], t[-1]),
+                x0_flat,
+                t_eval=t,
+                **kwargs,
+            )
+            # Restore spatial shape: (n_t, *spatial, n_features)
+            x_out = sol.y.T.reshape((sol.y.shape[1],) + original_shape)
+        else:
+            sol = _scipy_solve_ivp(
+                rhs,
+                (t[0], t[-1]),
+                x0,
+                t_eval=t,
+                **kwargs,
+            )
+            x_out = sol.y.T
+
         self.n_steps_ = sol.nfev
         return IntegratorResult(
             t=sol.t,
-            x=sol.y.T,
+            x=x_out,
             success=sol.success,
             message=sol.message,
             n_steps=sol.nfev,
