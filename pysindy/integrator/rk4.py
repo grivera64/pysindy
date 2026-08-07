@@ -34,26 +34,25 @@ class RK4Integrator(BaseIntegrator):
     _default_kwargs = {"substeps": 1}
 
     def solve_ivp(
-        self, rhs, t, x0, apply_constraints=None, **kwargs
+        self, rhs, t, x0, apply_constraints=None, callback=None, **kwargs
     ) -> IntegratorResult:
         kwargs = {**self._default_kwargs, **kwargs}
         substeps = kwargs.pop("substeps", 1)
         if substeps < 1:
             raise ValueError("substeps must be a positive integer")
+
+        if apply_constraints is None:
+            apply_constraints = lambda _, x: x
+        
+        X = np.zeros((len(t), *x0.shape), dtype=x0.dtype)
         t = np.asarray(t, dtype=float)
-        # Preserve the spatial shape of x0: output is
-        # (n_samples, *spatial, n_features) so that apply_constraints
-        # can act on the spatial grid (e.g. boundary conditions).
-        x = np.zeros((len(t), *x0.shape), dtype=x0.dtype)
-        x[0] = x0
-        n_steps = 0
 
         def _diverged(i_step, n_step):
-            x[i_step:] = np.nan
+            X[i_step:] = np.nan
             self.n_steps_ = n_step
             return IntegratorResult(
                 t=t,
-                x=x,
+                x=X,
                 success=False,
                 message=(
                     "RK4 integration diverged (non-finite state) "
@@ -64,38 +63,48 @@ class RK4Integrator(BaseIntegrator):
                 n_steps=n_step,
             )
 
+        X[0] = x0
+        n_steps = 0
         for i in range(1, len(t)):
-            h = (t[i] - t[i - 1]) / substeps
-            x_curr = x[i - 1]
+            t_start = t[i - 1]
+            t_end = t[i]
+            x_i = apply_constraints(t_start, X[i - 1])
+            h = (t_end - t_start) / substeps
+
+            t_curr = t_start
             for _ in range(substeps):
-                # The rhs may raise (e.g. sklearn rejecting Inf produced
-                # by a library transform such as 1/u at a zero crossing)
-                # or return non-finite values when the state diverges.
-                # Either way, treat it as divergence and stop early with
-                # a clear message instead of letting the error propagate.
+                t_mid = t_curr + h / 2
+                t_next = t_curr + h
                 try:
-                    k1 = rhs(t[i - 1], x_curr)
-                    k2 = rhs(t[i - 1] + h / 2, x_curr + h * k1 / 2)
-                    k3 = rhs(t[i - 1] + h / 2, x_curr + h * k2 / 2)
-                    k4 = rhs(t[i - 1] + h, x_curr + h * k3)
-                    x_curr = x_curr + (h / 6) * (k1 + 2 * k2 + 2 * k3 + k4)
+                    k1 = rhs(t_curr, x_i)
+                    x_k1 = apply_constraints(t_mid, x_i + h * k1 / 2)
+
+                    k2 = rhs(t_mid, x_k1)
+                    x_k2 = apply_constraints(t_mid, x_i + h * k2 / 2)
+
+                    k3 = rhs(t_mid, x_k2)
+                    x_k3 = apply_constraints(t_next, x_i + h * k3)
+
+                    k4 = rhs(t_next, x_k3)
+                    x_i = apply_constraints(t_next, x_i + (h / 6) * (k1 + 2 * k2 + 2 * k3 + k4))
                 except (ValueError, FloatingPointError, OverflowError):
                     n_steps += 1
                     return _diverged(i, n_steps)
                 n_steps += 1
 
-                if apply_constraints is not None:
-                    x_curr = apply_constraints(t[i], x_curr)
-
-                if not np.all(np.isfinite(x_curr)):
+                if not np.all(np.isfinite(x_i)):
                     return _diverged(i, n_steps)
 
-            x[i] = x_curr
+                t_curr = t_next
+
+            if callback is not None:
+                x_i = callback(t_end, x_i)
+            X[i] = x_i
 
         self.n_steps_ = n_steps
         return IntegratorResult(
             t=t,
-            x=x,
+            x=X,
             success=True,
             message="The solver successfully reached the end of the "
             "integration interval.",

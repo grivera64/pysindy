@@ -8,11 +8,16 @@ from .odeint import OdeintIntegrator
 from .rk4 import RK4Integrator
 from .scipy_ivp import ScipyIntegrator
 
+from .backward_euler import BackwardEulerIntegrator
+from .hybrid_rk4 import HybridRK4Integrator
+
 #: Registry mapping integrator names to classes.
 INTEGRATORS = {
     "solve_ivp": ScipyIntegrator,
     "odeint": OdeintIntegrator,
     "rk4": RK4Integrator,
+    "backward_euler": BackwardEulerIntegrator,
+    "hybrid_rk4": HybridRK4Integrator,
 }
 
 __all__ = [
@@ -20,6 +25,8 @@ __all__ = [
     "ScipyIntegrator",
     "OdeintIntegrator",
     "RK4Integrator",
+    "BackwardEulerIntegrator",
+    "HybridRK4Integrator"
     "INTEGRATORS",
     "get_integrator",
 ]

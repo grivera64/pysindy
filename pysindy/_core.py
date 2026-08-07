@@ -617,6 +617,8 @@ class SINDy(_BaseSINDy):
         x0,
         t,
         u=None,
+        apply_constraints=None,
+        callback=None,
         integrator="solve_ivp",
         interpolator=None,
         integrator_kws={},
@@ -722,7 +724,7 @@ class SINDy(_BaseSINDy):
             return np.squeeze(pred, axis=sample_axis)
 
         integrator_cls = get_integrator(integrator)
-        result = integrator_cls().solve_ivp(rhs, t, x0, **integrator_kws)
+        result = integrator_cls().solve_ivp(rhs, t, x0, apply_constraints, callback, **integrator_kws)
         if not result.success:
             warnings.warn(
                 f"Integration failed: {result.message}", RuntimeWarning

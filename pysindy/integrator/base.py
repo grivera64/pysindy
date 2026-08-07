@@ -25,7 +25,7 @@ class BaseIntegrator(abc.ABC):
     # Force subclasses to implement this
     @abc.abstractmethod
     def solve_ivp(
-        self, rhs, t, x0, apply_constraints=None, **kwargs
+        self, rhs, t, x0, apply_constraints=None, callback=None, **kwargs
     ) -> IntegratorResult:
         """
         Integrate the right-hand side of a dynamical system forward in time.
@@ -49,6 +49,12 @@ class BaseIntegrator(abc.ABC):
             step, with signature ``apply_constraints(t, x) -> x``. Used for
             enforcing boundary conditions, applying data-assimilation
             corrections, or other per-step projections of the state.
+        
+        callback: callable, optional (default None)
+            Function applied to the state at the end of each numerical
+            step, with signature ``callback(t, x) -> x``. Used for
+            enforcing boundary conditions, applying data-assimilation
+            corrections, or other per-step projections of the state.
 
         **kwargs: dict, optional
             Optional keyword arguments to pass to the integrator.
@@ -59,4 +65,4 @@ class BaseIntegrator(abc.ABC):
             Container with the solution and diagnostics. See
             :class:`pysindy.integrator.IntegratorResult`.
         """
-        raise NotImplementedError
+        ...

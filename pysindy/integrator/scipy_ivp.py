@@ -1,6 +1,8 @@
 """
 Adapter to scipy.integrate.solve_ivp.
 """
+import warnings
+
 import numpy as np
 from scipy.integrate import solve_ivp as _scipy_solve_ivp
 
@@ -26,13 +28,22 @@ class ScipyIntegrator(BaseIntegrator):
     _default_kwargs = {"method": "LSODA", "rtol": 1e-12, "atol": 1e-12}
 
     def solve_ivp(
-        self, rhs, t, x0, apply_constraints=None, **kwargs
+        self, rhs, t, x0, apply_constraints=None, callback=None, **kwargs
     ) -> IntegratorResult:
-        if apply_constraints is not None:
-            raise NotImplementedError(
-                "apply_constraints is not supported for ScipyIntegrator. "
+        if callback is not None:
+            # raise NotImplementedError(
+            #     "apply_constraints is not supported for ScipyIntegrator. "
+            #     "Use a per-step integrator (e.g. RK4) instead."
+            # )
+            warnings.warn(
+                "callback is not supported for ScipyIntegrator. "
                 "Use a per-step integrator (e.g. RK4) instead."
             )
+        _rhs = rhs
+        def rhs(t, x):
+            if apply_constraints is not None:
+                x = apply_constraints(t, x)
+            return _rhs(t, x)
         t = np.asarray(t, dtype=float)
         kwargs = {**self._default_kwargs, **kwargs}
 

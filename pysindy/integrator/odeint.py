@@ -27,7 +27,7 @@ class OdeintIntegrator(BaseIntegrator):
     _default_kwargs = {"rtol": 1e-12, "atol": 1e-12}
 
     def solve_ivp(
-        self, rhs, t, x0, apply_constraints=None, **kwargs
+        self, rhs, t, x0, apply_constraints=None, callback=None, **kwargs
     ) -> IntegratorResult:
         if apply_constraints is not None:
             raise NotImplementedError(

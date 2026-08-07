@@ -259,67 +259,71 @@ class FiniteDifference(BaseDifferentiation):
         """
         Apply finite difference method.
         """
-        x_dot = np.full_like(x, fill_value=np.nan)
-        s = [slice(None)] * len(x.shape)
+        original_axis = self.axis
+        try:
+            x_dot = np.full_like(x, fill_value=np.nan)
+            s = [slice(None)] * len(x.shape)
 
-        if self.axis < 0:
-            # Need to do this for _accumulate function to work properly?
-            self.axis = len(x.shape) + self.axis
+            if self.axis < 0:
+                # Need to do this for _accumulate function to work properly?
+                self.axis = len(x.shape) + self.axis
 
-        # Central differences in interior of domain
-        if np.isscalar(t) or self.is_uniform:
-            dt = t
-            if not np.isscalar(t):
-                dt = t[1] - t[0]
+            # Central differences in interior of domain
+            if np.isscalar(t) or self.is_uniform:
+                dt = t
+                if not np.isscalar(t):
+                    dt = t[1] - t[0]
 
-            coeffs = self._constant_coefficients(dt)
-            dims = np.array(x.shape)
-            dims[self.axis] = x.shape[self.axis] - (self.n_stencil - 1)
-            interior = np.zeros(dims)
-            # Slightly faster version of self._accumulate for uniform grid
-            for i in range(self.n_stencil):
-                if abs(coeffs[i]) > 0:
-                    start = i
-                    stop = -(self.n_stencil - start - 1)
-                    if stop >= 0:
-                        stop = None
-                    s[self.axis] = slice(start, stop)
-                    interior = interior + x[tuple(s)] * coeffs[i]
-        else:
-            t = AxesArray(np.array(t), axes={"ax_time": 0, "ax_coord": 1})
-            coeffs = self._coefficients(t)
-            interior = self._accumulate(coeffs, x)
-        s[self.axis] = slice((self.n_stencil - 1) // 2, -(self.n_stencil - 1) // 2)
-        x_dot[tuple(s)] = interior
-
-        # Boundaries
-        if not self.drop_endpoints:
-            # Forward differences on boundary
-            if not self.periodic:
-                coeffs = self._coefficients_boundary_forward(t)
-                boundary = self._accumulate(coeffs, x)
-
-                if self.order % 2 == 0:
-                    right_len = (self.n_stencil - 1) // 2
-                else:
-                    right_len = 1 + (self.n_stencil - 1) // 2
-                s[self.axis] = np.concatenate(
-                    [
-                        np.arange((self.n_stencil - 1) // 2, dtype=int),
-                        np.flip(-1 - np.arange(right_len, dtype=int)),
-                    ]
-                )
-            # Central differences on boundary with periodic bcs
+                coeffs = self._constant_coefficients(dt)
+                dims = np.array(x.shape)
+                dims[self.axis] = x.shape[self.axis] - (self.n_stencil - 1)
+                interior = np.zeros(dims)
+                # Slightly faster version of self._accumulate for uniform grid
+                for i in range(self.n_stencil):
+                    if abs(coeffs[i]) > 0:
+                        start = i
+                        stop = -(self.n_stencil - start - 1)
+                        if stop >= 0:
+                            stop = None
+                        s[self.axis] = slice(start, stop)
+                        interior = interior + x[tuple(s)] * coeffs[i]
             else:
-                coeffs = self._coefficients_boundary_periodic(t)
-                boundary = self._accumulate(coeffs, x)
-                s[self.axis] = np.concatenate(
-                    [
-                        np.arange(0, (self.n_stencil - 1) // 2),
-                        -np.flip(1 + np.arange(1, (self.n_stencil - 1) // 2)),
-                        np.array([-1]),
-                    ]
-                )
-            x_dot[tuple(s)] = boundary
-        self.smoothed_x_ = x
-        return x_dot
+                t = AxesArray(np.array(t), axes={"ax_time": 0, "ax_coord": 1})
+                coeffs = self._coefficients(t)
+                interior = self._accumulate(coeffs, x)
+            s[self.axis] = slice((self.n_stencil - 1) // 2, -(self.n_stencil - 1) // 2)
+            x_dot[tuple(s)] = interior
+
+            # Boundaries
+            if not self.drop_endpoints:
+                # Forward differences on boundary
+                if not self.periodic:
+                    coeffs = self._coefficients_boundary_forward(t)
+                    boundary = self._accumulate(coeffs, x)
+
+                    if self.order % 2 == 0:
+                        right_len = (self.n_stencil - 1) // 2
+                    else:
+                        right_len = 1 + (self.n_stencil - 1) // 2
+                    s[self.axis] = np.concatenate(
+                        [
+                            np.arange((self.n_stencil - 1) // 2, dtype=int),
+                            np.flip(-1 - np.arange(right_len, dtype=int)),
+                        ]
+                    )
+                # Central differences on boundary with periodic bcs
+                else:
+                    coeffs = self._coefficients_boundary_periodic(t)
+                    boundary = self._accumulate(coeffs, x)
+                    s[self.axis] = np.concatenate(
+                        [
+                            np.arange(0, (self.n_stencil - 1) // 2),
+                            -np.flip(1 + np.arange(1, (self.n_stencil - 1) // 2)),
+                            np.array([-1]),
+                        ]
+                    )
+                x_dot[tuple(s)] = boundary
+            self.smoothed_x_ = x
+            return x_dot
+        finally:
+            self.axis = original_axis
