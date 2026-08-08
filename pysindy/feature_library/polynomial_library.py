@@ -2,7 +2,9 @@ from itertools import chain
 from math import comb
 from typing import Iterator
 from typing import Tuple
+from collections import Counter
 
+import joblib
 import numpy as np
 from numpy.typing import NDArray
 from scipy import sparse
@@ -15,6 +17,8 @@ from ..utils import wrap_axes
 from ..utils._axis_conventions import AX_COORD
 from .base import BaseFeatureLibrary
 from .base import x_sequence_or_item
+
+VECTORIZATION_BATCH_THRESHOLD = 100
 
 
 class PolynomialLibrary(BaseFeatureLibrary, PolynomialFeatures):
@@ -184,6 +188,42 @@ class PolynomialLibrary(BaseFeatureLibrary, PolynomialFeatures):
                 " be True"
             )
         n_features = x_full[0].shape[AX_COORD]
+        combinations_iter = self._combinations(
+            n_features,
+            self.degree,
+            self.include_interaction,
+            self.interaction_only,
+            self.include_bias,
+        )
+        
+        exponents = []
+        for combo in combinations_iter:
+            row = [0] * n_features
+            for idx, count in Counter(combo).items():
+                row[idx] = count
+            exponents.append(row)
+            
+        self.n_features_in_ = n_features
+        self.n_output_features_ = len(exponents)
+        self._exponents = np.array(exponents, dtype=int)
+        
+        return self
+
+    @x_sequence_or_item
+    def _process_raw(self, x_arr, axes):
+        x_reconstructed = AxesArray(x_arr, axes)
+        return self._process_trajectory(x_reconstructed)
+
+    def _process_trajectory(self, x):
+        if sparse.issparse(x) and x.format not in ["csr", "csc"]:
+            # create new with correct sparse
+            axes = comprehend_axes(x)
+            x = x.asformat("csc")
+            wrap_axes(axes, x)
+        n_features = x.shape[AX_COORD]
+        if n_features != self.n_features_in_:
+            raise ValueError("x shape does not match training shape")
+
         combinations = self._combinations(
             n_features,
             self.degree,
@@ -191,17 +231,73 @@ class PolynomialLibrary(BaseFeatureLibrary, PolynomialFeatures):
             self.interaction_only,
             self.include_bias,
         )
-        self.n_features_in_ = n_features
-        self.n_output_features_ = sum(1 for _ in combinations)
-        return self
+        if sparse.isspmatrix(x):
+            columns = []
+            for combo in combinations:
+                if combo:
+                    out_col = 1
+                    for col_idx in combo:
+                        out_col = x[..., col_idx].multiply(out_col)
+                    columns.append(out_col)
+                else:
+                    bias = sparse.csc_matrix(np.ones((x.shape[0], 1)))
+                    columns.append(bias)
+            xp = sparse.hstack(columns, dtype=x.dtype).tocsc()
+        else:
+            if x.shape[0] < VECTORIZATION_BATCH_THRESHOLD:
+                if not hasattr(self, "_exponents"):
+                    combinations_iter = self._combinations(
+                        n_features,
+                        self.degree,
+                        self.include_interaction,
+                        self.interaction_only,
+                        self.include_bias,
+                    )
+                    exponents = []
+                    for combo in combinations_iter:
+                        row = [0] * n_features
+                        for idx, count in Counter(combo).items():
+                            row[idx] = count
+                        exponents.append(row)
+                    self._exponents = np.array(exponents, dtype=int)
+                    # Ensure n_output_features_ is set properly in this fallback
+                    self.n_output_features_ = len(exponents)
+                            
+                x_arr = np.asarray(x)
+                x_expanded = np.expand_dims(x_arr, axis=-2)
+                xp = AxesArray(
+                    np.prod(x_expanded ** self._exponents, axis=-1, dtype=x.dtype),
+                    x.axes,
+                )
+            else:
+                combinations = self._combinations(
+                    n_features,
+                    self.degree,
+                    self.include_interaction,
+                    self.interaction_only,
+                    self.include_bias,
+                )
+                xp = AxesArray(
+                    np.empty(
+                        (*x.shape[:-1], self.n_output_features_),
+                        dtype=x.dtype,
+                        order=self.order,
+                    ),
+                    x.axes,
+                )
+                for i, combo in enumerate(combinations):
+                    xp[..., i] = x[..., combo].prod(-1)
+                    
+        return xp
 
     @x_sequence_or_item
-    def transform(self, x_full):
-        """Transform data to polynomial features.
+    def transform(self, x):
+        """
+        Transform data to polynomial features
 
         Parameters
         ----------
-        x_full : {array-like, sparse matrix} of shape (n_samples, n_features)
+        x : array-like, shape (n_samples, n_features)
             The data to transform, row by row.
 
         Returns
@@ -213,48 +309,17 @@ class PolynomialLibrary(BaseFeatureLibrary, PolynomialFeatures):
         """
         check_is_fitted(self)
 
-        xp_full = []
-        for x in x_full:
-            if sparse.issparse(x) and x.format not in ["csr", "csc"]:
-                # create new with correct sparse
-                axes = comprehend_axes(x)
-                x = x.asformat("csc")
-                wrap_axes(axes, x)
-            n_features = x.shape[AX_COORD]
-            if n_features != self.n_features_in_:
-                raise ValueError("x shape does not match training shape")
+        x_full = x
+        if self.n_jobs != 1 and len(x_full) > 1:
+            x_raw_list = [np.asarray(xi) for xi in x_full]
+            axes_list = [getattr(xi, "axes", {}) for xi in x_full]
 
-            combinations = self._combinations(
-                n_features,
-                self.degree,
-                self.include_interaction,
-                self.interaction_only,
-                self.include_bias,
+            xp_full = joblib.Parallel(n_jobs=self.n_jobs)(
+                joblib.delayed(self._process_raw)(x_arr, axes) for x_arr, axes in zip(x_raw_list, axes_list)
             )
-            if sparse.isspmatrix(x):
-                columns = []
-                for combo in combinations:
-                    if combo:
-                        out_col = 1
-                        for col_idx in combo:
-                            out_col = x[..., col_idx].multiply(out_col)
-                        columns.append(out_col)
-                    else:
-                        bias = sparse.csc_matrix(np.ones((x.shape[0], 1)))
-                        columns.append(bias)
-                xp = sparse.hstack(columns, dtype=x.dtype).tocsc()
-            else:
-                xp = AxesArray(
-                    np.empty(
-                        (*x.shape[:-1], self.n_output_features_),
-                        dtype=x.dtype,
-                        order=self.order,
-                    ),
-                    x.axes,
-                )
-                for i, combo in enumerate(combinations):
-                    xp[..., i] = x[..., combo].prod(-1)
-            xp_full = xp_full + [xp]
+        else:
+            xp_full = [self._process_trajectory(x) for x in x_full]
+
         return xp_full
 
 

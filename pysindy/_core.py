@@ -46,6 +46,7 @@ class _BaseSINDy(BaseEstimator, ABC):
     feature_library: BaseFeatureLibrary
     optimizer: _BaseOptimizer
     n_control_features_: int = 0
+    n_jobs: int = 1
 
     def __init__(
         self,
@@ -121,10 +122,20 @@ class _BaseSINDy(BaseEstimator, ABC):
             u = validate_control_variables(x, u)
             x = [np.concatenate((xi, ui), axis=xi.ax_coord) for xi, ui in zip(x, u)]
 
+        if self.n_jobs != 1:
+            self.feature_library.n_jobs = self.n_jobs
+            
         x_feat = self.feature_library.transform(x)
         x_feat = [concat_sample_axis([xi]) for xi in x_feat]
 
-        result = [self.optimizer.predict(xi) for xi in x_feat]
+        if self.n_jobs != 1:
+            import joblib
+            result = joblib.Parallel(n_jobs=self.n_jobs)(
+                joblib.delayed(self.optimizer.predict)(xi) for xi in x_feat
+            )
+        else:
+            result = [self.optimizer.predict(xi) for xi in x_feat]
+            
         result = [np.reshape(pred, shp) for pred, shp in zip(result, input_shapes)]
 
         # Kept for backwards compatibility.
@@ -321,11 +332,13 @@ class SINDy(_BaseSINDy):
         optimizer: Optional[BaseOptimizer] = None,
         feature_library: Optional[BaseFeatureLibrary] = None,
         differentiation_method: Optional[BaseDifferentiation] = None,
+        n_jobs: int = 1,
     ):
         super().__init__(feature_library, optimizer)
         if differentiation_method is None:
             differentiation_method = FiniteDifference(axis=-2)
         self.differentiation_method = differentiation_method
+        self.n_jobs = n_jobs
 
     def fit(
         self,
@@ -419,6 +432,9 @@ class SINDy(_BaseSINDy):
             ]
 
         self.feature_names_ = feature_names
+
+        if self.n_jobs != 1:
+            self.feature_library.n_jobs = self.n_jobs
 
         f_of_x = self.feature_library.fit_transform(x_smooth)
         features = concat_sample_axis(f_of_x)

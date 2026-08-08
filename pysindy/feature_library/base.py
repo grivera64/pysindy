@@ -31,6 +31,7 @@ class BaseFeatureLibrary(TransformerMixin, BaseEstimator):
 
     n_features_in_: int
     n_output_features_: int
+    n_jobs: int = 1
 
     def validate_input(self, x, *args, **kwargs):
         return validate_no_reshape(x, *args, **kwargs)
