@@ -682,6 +682,8 @@ class SINDy(_BaseSINDy):
                 " points at which to simulate"
             )
 
+        x0 = np.asarray(x0)
+
         if u is None or self.n_control_features_ == 0:
             if u is not None:
                 warnings.warn(

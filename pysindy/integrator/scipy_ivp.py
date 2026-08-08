@@ -31,19 +31,18 @@ class ScipyIntegrator(BaseIntegrator):
         self, rhs, t, x0, apply_constraints=None, callback=None, **kwargs
     ) -> IntegratorResult:
         if callback is not None:
-            # raise NotImplementedError(
-            #     "apply_constraints is not supported for ScipyIntegrator. "
-            #     "Use a per-step integrator (e.g. RK4) instead."
-            # )
-            warnings.warn(
+            raise NotImplementedError(
                 "callback is not supported for ScipyIntegrator. "
-                "Use a per-step integrator (e.g. RK4) instead."
+                "Use a per-step integrator (e.g. 'rk4') instead."
             )
-        _rhs = rhs
-        def rhs(t, x):
-            if apply_constraints is not None:
-                x = apply_constraints(t, x)
-            return _rhs(t, x)
+        
+        if apply_constraints is not None:
+            raise NotImplementedError(
+                "apply_constraints is not supported for ScipyIntegrator. "
+                "Applying constraints inside the SciPy RHS is mathematically "
+                "incorrect for adaptive solvers. Use a per-step integrator "
+                "(e.g. 'rk4') instead."
+            )
         t = np.asarray(t, dtype=float)
         kwargs = {**self._default_kwargs, **kwargs}
 
