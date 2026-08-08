@@ -45,14 +45,15 @@ class BackwardEulerIntegrator(BaseIntegrator):
     def solve_ivp(
         self, rhs, t, x0, apply_constraints=None, callback=None, **kwargs
     ) -> IntegratorResult:
+        if apply_constraints is None:
+            apply_constraints = lambda _, x: x
+        
+        t = np.asarray(t, dtype=float)
         kwargs = {**self._default_kwargs, **kwargs}
         substeps = kwargs.pop("substeps", 1)
         if substeps < 1:
             raise ValueError("substeps must be a positive integer")
 
-        if apply_constraints is None:
-            apply_constraints = lambda _, x: x
-        
         alpha = kwargs.pop("alpha", 1.0)
         root_kws = kwargs.pop("root_kws", {})
         
@@ -61,7 +62,6 @@ class BackwardEulerIntegrator(BaseIntegrator):
         root_opts.update(root_kws)
 
         X = np.zeros((len(t), *x0.shape), dtype=x0.dtype)
-        t = np.asarray(t, dtype=float)
 
         def _diverged(i_step, n_step, message=""):
             X[i_step:] = np.nan
@@ -117,7 +117,7 @@ class BackwardEulerIntegrator(BaseIntegrator):
                 t_curr = t_next
 
             if callback is not None:
-                x_curr = callback(t[i], x_curr)
+                x_curr = callback(i, t[i], x_curr)
             X[i] = x_curr
 
         self.n_steps_ = n_steps

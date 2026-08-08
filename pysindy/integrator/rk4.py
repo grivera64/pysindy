@@ -36,16 +36,16 @@ class RK4Integrator(BaseIntegrator):
     def solve_ivp(
         self, rhs, t, x0, apply_constraints=None, callback=None, **kwargs
     ) -> IntegratorResult:
+        if apply_constraints is None:
+            apply_constraints = lambda _, x: x
+        
+        t = np.asarray(t, dtype=float)
         kwargs = {**self._default_kwargs, **kwargs}
         substeps = kwargs.pop("substeps", 1)
         if substeps < 1:
             raise ValueError("substeps must be a positive integer")
 
-        if apply_constraints is None:
-            apply_constraints = lambda _, x: x
-        
         X = np.zeros((len(t), *x0.shape), dtype=x0.dtype)
-        t = np.asarray(t, dtype=float)
 
         def _diverged(i_step, n_step):
             X[i_step:] = np.nan

@@ -8,7 +8,6 @@ from sklearn.base import BaseEstimator
 
 from ._result import IntegratorResult
 
-
 class BaseIntegrator(abc.ABC):
     """
     Base class for integrators.

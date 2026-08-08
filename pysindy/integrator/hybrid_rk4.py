@@ -37,13 +37,13 @@ class HybridRK4Integrator(BaseIntegrator):
     def solve_ivp(
         self, rhs, t, x0, apply_constraints=None, callback=None, **kwargs
     ) -> IntegratorResult:
+        if apply_constraints is None:
+            apply_constraints = lambda _, x: x
+
         kwargs = {**self._default_kwargs, **kwargs}
         substeps = kwargs.pop("substeps", 1)
         if substeps < 1:
             raise ValueError("substeps must be a positive integer")
-        
-        if apply_constraints is None:
-            apply_constraints = lambda _, x: x
 
         stability_limit = kwargs.pop("stability_limit", 2.5)
         alpha = kwargs.pop("alpha", 1.0)
@@ -96,7 +96,7 @@ class HybridRK4Integrator(BaseIntegrator):
                             x_curr,
                             message=f"Math error on base state: {str(e)}",
                         )
-                    x_curr = callback(t_next, x_curr)
+                    x_curr = callback(i, t_next, x_curr)
                     recovered = True
                     break
 
@@ -154,7 +154,7 @@ class HybridRK4Integrator(BaseIntegrator):
                                     x_curr,
                                     message=f"Implicit solver failed: {sol.message}",
                                 )
-                            x_curr = callback(t_next, x_curr)
+                            x_curr = callback(i, t_next, x_curr)
                             recovered = True
                             break
                         
@@ -167,7 +167,7 @@ class HybridRK4Integrator(BaseIntegrator):
                                 x_curr,
                                 message=f"Implicit solver math error: {str(e)}",
                             )
-                        x_curr = callback(t_next, x_curr)
+                        x_curr = callback(i, t_next, x_curr)
                         recovered = True
                         break
                     implicit_steps_taken += 1
@@ -176,13 +176,13 @@ class HybridRK4Integrator(BaseIntegrator):
                 if not np.all(np.isfinite(x_curr)):
                     if callback is None:
                         return _diverged(i, n_steps, x_curr, message="Non-finite state produced.")
-                    x_curr = callback(t_next, x_curr)
+                    x_curr = callback(i, t_next, x_curr)
                     recovered = True
                     break
                 t_curr = t_next
 
             if callback is not None and not recovered:
-                x_curr = callback(t[i], x_curr)
+                x_curr = callback(i, t[i], x_curr)
             X[i] = x_curr
 
         self.n_steps_ = n_steps
