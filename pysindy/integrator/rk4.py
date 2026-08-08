@@ -98,7 +98,7 @@ class RK4Integrator(BaseIntegrator):
                 t_curr = t_next
 
             if callback is not None:
-                x_i = callback(t_end, x_i)
+                x_i = callback(i, t_end, x_i)
             X[i] = x_i
 
         self.n_steps_ = n_steps
