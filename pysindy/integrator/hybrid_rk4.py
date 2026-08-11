@@ -135,11 +135,11 @@ class HybridRK4Integrator(BaseIntegrator):
                 else:
                     f_curr = 0.0
                     def residual(x_next_flat):
-                        x_next_unconstrained = x_next_flat.reshape(x_curr.shape)
+                        x_next = apply_constraints(t_next, x_next_flat.reshape(x_curr.shape))
                         if alpha == 1.0:
-                            error_vector = x_next_unconstrained - x_curr - h * rhs(t_next, x_next_unconstrained)
+                            error_vector = x_next - x_curr - h * rhs(t_next, x_next)
                         else:
-                            error_vector = x_next_unconstrained - x_curr - h * ((1.0 - alpha) * f_curr + alpha * rhs(t_next, x_next_unconstrained))
+                            error_vector = x_next - x_curr - h * ((1.0 - alpha) * f_curr + alpha * rhs(t_next, x_next))
                         return error_vector.ravel()
                     
                     try:
