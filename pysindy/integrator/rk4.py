@@ -63,12 +63,12 @@ class RK4Integrator(BaseIntegrator):
                 n_steps=n_step,
             )
 
-        X[0] = x0
+        X[0] = apply_constraints(t[0], x0)
         n_steps = 0
         for i in range(1, len(t)):
             t_start = t[i - 1]
             t_end = t[i]
-            x_i = apply_constraints(t_start, X[i - 1])
+            x_i = X[i - 1]
             h = (t_end - t_start) / substeps
 
             for step in range(substeps):

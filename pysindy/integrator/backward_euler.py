@@ -77,12 +77,12 @@ class BackwardEulerIntegrator(BaseIntegrator):
                 n_steps=n_step,
             )
 
-        X[0] = x0
+        X[0] = apply_constraints(t[0], x0)
         n_steps = 0
         for i in range(1, len(t)):
             t_start = t[i - 1]
             t_end = t[i]
-            x_curr = apply_constraints(t_start, X[i - 1])
+            x_curr = X[i - 1]
             h = (t_end - t_start) / substeps
 
             for step in range(substeps):
@@ -91,11 +91,11 @@ class BackwardEulerIntegrator(BaseIntegrator):
 
                 f_curr = 0.0
                 def residual(x_next_flat):
-                    x_next = apply_constraints(t_next, x_next_flat.reshape(x_curr.shape))
+                    x_next_unconstrained = x_next_flat.reshape(x_curr.shape)
                     if alpha == 1.0:
-                        error_vector = x_next - x_curr - h * rhs(t_next, x_next)
+                        error_vector = x_next_unconstrained - x_curr - h * rhs(t_next, x_next_unconstrained)
                     else:
-                        error_vector = x_next - x_curr - h * ((1.0 - alpha) * f_curr + alpha * rhs(t_next, x_next))
+                        error_vector = x_next_unconstrained - x_curr - h * ((1.0 - alpha) * f_curr + alpha * rhs(t_next, x_next_unconstrained))
                     return error_vector.ravel()
                 
                 try:
