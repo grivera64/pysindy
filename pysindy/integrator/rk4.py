@@ -71,10 +71,10 @@ class RK4Integrator(BaseIntegrator):
             x_i = apply_constraints(t_start, X[i - 1])
             h = (t_end - t_start) / substeps
 
-            t_curr = t_start
-            for _ in range(substeps):
+            for step in range(substeps):
+                t_curr = t_start + step * h
+                t_next = t_start + (step + 1) * h
                 t_mid = t_curr + h / 2
-                t_next = t_curr + h
                 try:
                     k1 = rhs(t_curr, x_i)
                     x_k1 = apply_constraints(t_mid, x_i + h * k1 / 2)
@@ -94,8 +94,6 @@ class RK4Integrator(BaseIntegrator):
 
                 if not np.all(np.isfinite(x_i)):
                     return _diverged(i, n_steps)
-
-                t_curr = t_next
 
             if callback is not None:
                 x_i = callback(i, t_end, x_i)

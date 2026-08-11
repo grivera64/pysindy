@@ -85,9 +85,9 @@ class BackwardEulerIntegrator(BaseIntegrator):
             x_curr = apply_constraints(t_start, X[i - 1])
             h = (t_end - t_start) / substeps
 
-            t_curr = t_start
-            for _ in range(substeps):
-                t_next = t_curr + h
+            for step in range(substeps):
+                t_curr = t_start + step * h
+                t_next = t_start + (step + 1) * h
 
                 f_curr = 0.0
                 def residual(x_next_flat):
@@ -114,7 +114,6 @@ class BackwardEulerIntegrator(BaseIntegrator):
 
                 if not np.all(np.isfinite(x_curr)):
                     return _diverged(i, n_steps, message="Non-finite state produced.")
-                t_curr = t_next
 
             if callback is not None:
                 x_curr = callback(i, t[i], x_curr)

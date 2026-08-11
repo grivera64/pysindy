@@ -81,10 +81,10 @@ class HybridRK4Integrator(BaseIntegrator):
             h = (t_end - t_start) / substeps
             recovered = False
 
-            t_curr = t_start
-            for _ in range(substeps):
+            for step in range(substeps):
+                t_curr = t_start + step * h
+                t_next = t_start + (step + 1) * h
                 t_mid = t_curr + h / 2
-                t_next = t_curr + h
                 
                 try:
                     xdot_curr = rhs(t_curr, x_curr)
@@ -179,7 +179,6 @@ class HybridRK4Integrator(BaseIntegrator):
                     x_curr = callback(i, t_next, x_curr)
                     recovered = True
                     break
-                t_curr = t_next
 
             if callback is not None and not recovered:
                 x_curr = callback(i, t[i], x_curr)
