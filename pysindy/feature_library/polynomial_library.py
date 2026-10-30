@@ -189,7 +189,7 @@ class PolynomialLibrary(BaseFeatureLibrary, PolynomialFeatures):
             n_features,
             self.degree,
             include_bias=self.include_bias,
-            include_interation=self.include_interaction,
+            include_interaction=self.include_interaction,
             interaction_only=self.interaction_only,
         )
         return self
