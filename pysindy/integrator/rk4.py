@@ -21,9 +21,8 @@ class RK4Integrator(Integrator):
             prev_t = t[index - 1]
             curr_t = t[index]
             dt = curr_t - prev_t
+            sub_dt = dt / substeps
             for sub_index in range(substeps):
-                sub_dt = dt / substeps
-
                 offset = sub_dt * sub_index
                 k1 = sub_dt * f(prev_t + offset, x)
                 k2 = sub_dt * f(prev_t + offset + (0.5 * sub_dt), x + (0.5 * k1))

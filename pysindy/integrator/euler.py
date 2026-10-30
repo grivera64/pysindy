@@ -21,8 +21,8 @@ class EulerIntegrator(Integrator):
             prev_t = t[index - 1]
             curr_t = t[index]
             dt = curr_t - prev_t
+            sub_dt = dt / substeps
             for sub_index in range(substeps):
-                sub_dt = dt / substeps
                 sub_t = prev_t + sub_dt * sub_index
                 x += sub_dt * f(sub_t, x)
             X[..., index, :] = x[...]
