@@ -9,8 +9,7 @@ from typing import Sequence
 from typing import Union
 
 import numpy as np
-from scipy.integrate import odeint
-from scipy.integrate import solve_ivp
+from pysindy.integrator import _assert_integrator
 from scipy.interpolate import interp1d
 from sklearn.base import BaseEstimator
 from sklearn.metrics import r2_score
@@ -604,8 +603,8 @@ class SINDy(_BaseSINDy):
         u=None,
         integrator="solve_ivp",
         interpolator=None,
-        integrator_kws={"method": "LSODA", "rtol": 1e-12, "atol": 1e-12},
-        interpolator_kws={},
+        integrator_kws=None,
+        interpolator_kws=None,
     ):
         """
         Simulate the SINDy model forward in time.
@@ -627,20 +626,29 @@ class SINDy(_BaseSINDy):
             of control inputs at each time step. In this case, the array is fit
             with the interpolator specified by ``interpolator``.
 
-        integrator: string, optional (default ``solve_ivp``)
+        integrator: string, Integrator, or callable, optional (default ``solve_ivp``)
             Function to use to integrate the system.
-            Default is ``scipy.integrate.solve_ivp``. The only options
-            currently supported are solve_ivp and odeint.
+            Default is ``scipy.integrate.solve_ivp``. The only string
+            options currently supported are solve_ivp and odeint.
+            Alternatively, an instance of a class extending
+            :class:`pysindy.integrator.Integrator` or any callable with
+            signature ``(f, x0, t, **integrator_kws)`` may be passed.
 
         interpolator: callable, optional (default ``interp1d``)
             Function used to interpolate control inputs if ``u`` is an array.
             Default is ``scipy.interpolate.interp1d``.
 
-        integrator_kws: dict, optional (default {})
-            Optional keyword arguments to pass to the integrator
+        integrator_kws: dict, optional (default None)
+            Optional keyword arguments to pass to the integrator. See the
+            chosen integrator's documentation for accepted keywords.
+            When ``integrator`` is ``"solve_ivp"`` (default), the default
+            keyword arguments are ``method="LSODA"``, ``rtol=1e-12``, and
+            ``atol=1e-12``; see
+            :class:`pysindy.integrator.SolveIVPIntegrator`.
 
-        interpolator_kws: dict, optional (default {})
-            Optional keyword arguments to pass to the control input interpolator
+        interpolator_kws: dict, optional (default None)
+            Optional keyword arguments to pass to the control input
+            interpolator
 
         Returns
         -------
@@ -648,6 +656,8 @@ class SINDy(_BaseSINDy):
             Simulation results
         """
         check_is_fitted(self)
+        integrator_kws = integrator_kws or {}
+        interpolator_kws = interpolator_kws or {}
         if u is None and self.n_control_features_ > 0:
             raise TypeError("Model was fit using control variables, so u is required")
 
@@ -695,16 +705,8 @@ class SINDy(_BaseSINDy):
                 def rhs(t, x):
                     return self.predict(x[np.newaxis, :], u_fun(t))[0]
 
-        # Need to hard-code below, because odeint and solve_ivp
-        # have different syntax and integration options.
-        if integrator == "solve_ivp":
-            return ((solve_ivp(rhs, (t[0], t[-1]), x0, t_eval=t, **integrator_kws)).y).T
-        elif integrator == "odeint":
-            if integrator_kws.get("method") == "LSODA":
-                integrator_kws = {}
-            return odeint(rhs, x0, t, tfirst=True, **integrator_kws)
-        else:
-            raise ValueError("Integrator not supported, exiting")
+        integrator = _assert_integrator(integrator)
+        return integrator(rhs, x0, t, **integrator_kws)
 
     @property
     def complexity(self):

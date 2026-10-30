@@ -69,6 +69,7 @@ intersphinx_mapping = {
     "derivative": ("https://derivative.readthedocs.io/en/latest", None),
     "sklearn": ("https://scikit-learn.org/stable", None),
     "numpy": ("https://numpy.org/doc/stable", None),
+    "scipy": ("https://docs.scipy.org/doc/scipy", None),
 }
 
 show_warning_types = True
